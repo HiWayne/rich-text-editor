@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "@emotion/styled";
 import {
   ContentBlock,
@@ -112,7 +112,7 @@ const myBlockStyleFn = (contentBlock: ContentBlock) => {
     case TOOL_ITEM_NAMES.BLOCK_QUOTE:
       return "customBlockquote";
     case TOOL_ITEM_NAMES.CODE_BLOCK:
-      return "language-prism"
+      return "language-prism";
     default:
       return null as any;
   }
@@ -251,6 +251,25 @@ const DocContent = () => {
     return "not-handled";
   };
 
+  const handleEditorStateChange = useCallback((editorState: EditorState) => {
+    const changeTypes = [
+      "insert-characters",
+      "insert-fragment",
+      "backspace-character",
+      "remove-range",
+      "undo",
+      "redo",
+    ];
+    const lastChangeType = editorState.getLastChangeType();
+    const selection = editorState.getSelection();
+    const currentContent = editorState.getCurrentContent()
+    const anchorKey = selection.getAnchorKey();
+    const selectionBlock = currentContent.getBlockForKey(anchorKey)
+    const selectionBlockText = selectionBlock.getText()
+    console.log("lastChangeType: ", lastChangeType, 'selectionBlockText: ', selectionBlockText);
+    setEditorState(editorState);
+  }, []);
+
   return (
     <div>
       <TopTool>
@@ -323,7 +342,7 @@ const DocContent = () => {
             // blockRendererFn={myBlockRenderer}
             customStyleMap={editorStyleMap}
             editorState={editorState}
-            onChange={setEditorState}
+            onChange={handleEditorStateChange}
             handleKeyCommand={handleKeyCommand}
             spellCheck={true}
             placeholder="Tell a story..."

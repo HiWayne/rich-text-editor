@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "postinstall": "node ./checkVersion.js"
   },
   "dependencies": {
     "@duitang/dt-base": "^1.2.0",
@@ -21,6 +22,7 @@
     "draft-js-prism": "^1.0.6",
     "immer": "^9.0.12",
     "immutable": "^4.0.0",
+    "jsondiffpatch": "^0.4.1",
     "markdown-it": "^12.3.2",
     "prismjs": "^1.28.0",
     "qs": "^6.10.3",
@@ -41,8 +43,12 @@
     "@types/react-dom": "^18.0.0",
     "@vitejs/plugin-react": "^1.3.0",
     "path": "^0.12.7",
+    "semver": "^7.3.7",
     "typescript": "^4.6.3",
     "vite": "^2.9.5",
     "vite-plugin-svgr": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=17.0.0 <18.0.0"
   }
 }

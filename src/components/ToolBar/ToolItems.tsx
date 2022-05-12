@@ -58,7 +58,7 @@ export enum TOOL_ITEM_NAMES {
   "HEADER_N" = "HEADER_N",
   "HEADER_ONE" = "header-one",
   "HEADER_TWO" = "header-two",
-  "HEADER_THERE" = "header-there",
+  "HEADER_THREE" = "header-three",
   "HEADER_FOUR" = "header-four",
   "HEADER_FIVE" = "header-five",
   "HEADER_SIX" = "header-six",
@@ -274,8 +274,8 @@ const ToolItems: ToolItemsType = {
   [TOOL_ITEM_NAMES.HEADER_TWO]: createToolItemComponent(StyleTypes.BLOCK)(
     TOOL_ITEM_NAMES.HEADER_TWO
   )(H2Icon)(),
-  [TOOL_ITEM_NAMES.HEADER_THERE]: createToolItemComponent(StyleTypes.BLOCK)(
-    TOOL_ITEM_NAMES.HEADER_THERE
+  [TOOL_ITEM_NAMES.HEADER_THREE]: createToolItemComponent(StyleTypes.BLOCK)(
+    TOOL_ITEM_NAMES.HEADER_THREE
   )(H3Icon)(),
 
   // hover HeaderN 时，h4-h9可见；click HeaderN 时，消失
