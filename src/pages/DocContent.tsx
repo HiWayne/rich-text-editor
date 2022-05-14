@@ -1,10 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled from "@emotion/styled";
+import debounce from "debounce";
+import { Delta, patch } from "jsondiffpatch";
 import {
   ContentBlock,
+  convertFromRaw,
+  convertToRaw,
   DraftEditorCommand,
   Editor,
-  EditorBlock,
   EditorState,
   RichUtils,
 } from "draft-js";
@@ -15,15 +18,14 @@ import {
   PlusOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { throttling } from "@duitang/dt-base";
+import { throttling, getParams } from "@duitang/dt-base";
 import CopyToClipboard from "react-copy-to-clipboard";
 import useStore from "store/index";
 import shallow from "zustand/shallow";
 import UserInfo from "../components/UserInfo";
-import { getParams } from "../util/getParams";
 import ToolBar from "components/ToolBar";
-import BlockQuote from "components/customDocRenders/BlockQuote";
 import { TOOL_ITEM_NAMES } from "components/ToolBar/ToolItems";
+import { createDoc, getDocDetail, updateDoc } from "api/doc";
 
 const { Option } = Select;
 
@@ -48,7 +50,7 @@ const InnerLeft = styled.div`
   align-items: center;
 `;
 
-const DocsName = styled.h1`
+const DocsName = styled.input`
   outline: none;
   border: 1px solid rgba(0, 0, 0, 0);
   overflow: hidden;
@@ -140,17 +142,29 @@ const myBlockStyleFn = (contentBlock: ContentBlock) => {
  */
 
 const DocContent = () => {
-  const [editorState, setEditorState] = useStore(
-    (state) => [state.editorState, state.setEditorState],
+  console.log(1);
+
+  const { id } = getParams("");
+  const [editorState, setEditorState, initEditorState] = useStore(
+    (state) => [state.editorState, state.setEditorState, state.initEditorState],
     shallow
   );
-  const [title, setTitle] = useState("");
+
+  const userInfo = useStore((state) => state.userInfo);
+  const [docInfo, setDocInfo] = useStore(
+    (state) => [state.docInfo, state.setDocInfo],
+    shallow
+  );
+
+  const [title, setTitle] = useState("未命名文档");
   const [lastUpdateTimeText, setLastUpdateTimeText] = useState("");
   const [renderContent, setRenderContent] = useState("");
 
   const lastUpdateTimeRef = useRef(0);
   const textAreaRef = useRef(null);
   const linkRef = useRef(null);
+  const wsRef = useRef<WebSocket>(null as any);
+  const updateTimerRef = useRef<number>(null as any);
 
   const handleChangePermission = () => {};
 
@@ -169,11 +183,25 @@ const DocContent = () => {
           </Select>
         }
         suffix={
-          <CopyToClipboard text={window.location.href}>
+          <CopyToClipboard
+            text={
+              window.location.protocol +
+              window.location.host +
+              window.location.pathname +
+              "?id=" +
+              docInfo.id
+            }
+          >
             <span>双击复制链接</span>
           </CopyToClipboard>
         }
-        value={window.location.href}
+        value={
+          window.location.protocol +
+          window.location.host +
+          window.location.pathname +
+          "?id=" +
+          docInfo.id
+        }
       ></Input>
     </div>
   );
@@ -191,51 +219,145 @@ const DocContent = () => {
     []
   );
 
+  const connectWebSocket = useCallback(() => {
+    const ws = new window.WebSocket("ws://localhost:3002/");
+    wsRef.current = ws;
+    ws.onmessage = (event) => {
+      console.log(`receive message: ${event.data}`);
+      handleMessage(JSON.parse(event.data));
+    };
+    return () => {
+      ws.close();
+    };
+  }, []);
+
+  const handleMessage = useCallback(
+    ({ delta, update_time }: { delta: Delta; update_time: number }) => {
+      if (!delta) {
+        return;
+      }
+      lastUpdateTimeRef.current = update_time;
+      const { editorState, setEditorState } = useStore.getState();
+      const raw = convertToRaw(editorState.getCurrentContent());
+      const nextContentState = convertFromRaw(patch(raw, delta));
+      setEditorState(
+        EditorState.push(editorState, nextContentState, "change-block-type")
+      );
+    },
+    []
+  );
+
+  const updateTimeText = useCallback(() => {
+    const duration = new Date().getTime() - lastUpdateTimeRef.current;
+    let value = 1,
+      suffix = "min前";
+    if (duration < 60000 * 60) {
+      suffix = "min前";
+      value = Math.floor(duration / 60000);
+    } else if (duration >= 60000 * 60 && duration < 60000 * 60 * 24) {
+      suffix = "hour前";
+      value = Math.floor(duration / (60000 * 60));
+    } else if (duration >= 60000 * 60 * 24 && duration < 60000 * 60 * 24 * 30) {
+      suffix = "day前";
+      value = Math.floor(duration / (60000 * 60 * 24));
+    } else if (
+      duration >= 60000 * 60 * 24 * 30 &&
+      duration < 60000 * 60 * 24 * 30 * 12
+    ) {
+      suffix = "月前";
+      value = Math.floor(duration / (60000 * 60 * 24 * 30));
+    } else if (duration >= 60000 * 60 * 24 * 30 * 12) {
+      suffix = "年前";
+      value = Math.floor(duration / (60000 * 60 * 24 * 30 * 12));
+    }
+    const timeText = Math.max(value, 1) + suffix;
+    setLastUpdateTimeText(timeText);
+    // 每分钟更新最近修改时间
+    updateTimerRef.current = setTimeout(updateTimeText, 60000);
+    return () => {
+      clearTimeout(updateTimerRef.current);
+    };
+  }, []);
+
+  const createInitialDoc = useCallback(async () => {
+    if (!userInfo) {
+      return;
+    }
+    const editorState = useStore.getState().editorState;
+    const docContent = JSON.stringify(
+      convertToRaw(editorState.getCurrentContent())
+    );
+    const data = await createDoc({
+      creator: userInfo.id,
+      content: docContent,
+      name: title,
+    });
+    if (data) {
+      setDocInfo(data);
+    }
+  }, []);
+
+  const getDocById = async () => {
+    const doc = await getDocDetail({ id });
+    if (doc) {
+      setDocInfo(doc);
+      setTitle(doc.name);
+      const content = JSON.parse(doc.content);
+      const contentState = convertFromRaw(content);
+      setEditorState(
+        EditorState.push(
+          EditorState.createEmpty(),
+          contentState,
+          "change-block-type"
+        )
+      );
+      return doc;
+    }
+  };
+
   useEffect(() => {
+    if (id === undefined) {
+      initEditorState();
+    }
+    const clearUpdateTimer = updateTimeText();
+
+    if (id === undefined) {
+      createInitialDoc();
+    } else {
+      getDocById().then((doc) => {
+        lastUpdateTimeRef.current = new Date(doc.update_time).getTime();
+        clearUpdateTimer();
+        updateTimeText();
+      });
+    }
+
+    // 建立websocket连接，订阅其他编辑者的更新
+    const closeWebSocket = connectWebSocket();
+
     // TODO: 后端返回的文档信息会有lastUpdateTime，这里临时用7天内的随机时间
     const randomLastUpdateTime =
       new Date().getTime() - Math.ceil(Math.random() * 60000 * 60 * 24 * 7);
 
-    lastUpdateTimeRef.current = randomLastUpdateTime;
-
-    const updateTimeText = () => {
-      const duration = new Date().getTime() - lastUpdateTimeRef.current;
-      let value = 1,
-        suffix = "min前";
-      if (duration < 60000 * 60) {
-        suffix = "min前";
-        value = Math.floor(duration / 60000);
-      } else if (duration >= 60000 * 60 && duration < 60000 * 60 * 24) {
-        suffix = "hour前";
-        value = Math.floor(duration / (60000 * 60));
-      } else if (
-        duration >= 60000 * 60 * 24 &&
-        duration < 60000 * 60 * 24 * 30
-      ) {
-        suffix = "day前";
-        value = Math.floor(duration / (60000 * 60 * 24));
-      } else if (
-        duration >= 60000 * 60 * 24 * 30 &&
-        duration < 60000 * 60 * 24 * 30 * 12
-      ) {
-        suffix = "月前";
-        value = Math.floor(duration / (60000 * 60 * 24 * 30));
-      } else if (duration >= 60000 * 60 * 24 * 30 * 12) {
-        suffix = "年前";
-        value = Math.floor(duration / (60000 * 60 * 24 * 30 * 12));
-      }
-      const timeText = Math.max(value, 1) + suffix;
-      setLastUpdateTimeText(timeText);
-    };
-
-    updateTimeText();
-
-    // 每分钟更新最近修改时间
-    const timer = setInterval(updateTimeText, 60000);
     return () => {
-      clearInterval(timer);
+      closeWebSocket();
+      clearUpdateTimer();
+      setDocInfo(null as any);
+      setEditorState(null as any);
     };
   }, []);
+
+  useEffect(() => {
+    if (Reflect.ownKeys(docInfo).length > 0 && title !== "未命名文档") {
+      updateDoc({ id: docInfo.id, name: title });
+    }
+  }, [docInfo, title]);
+
+  const saveManually = () => {
+    const content = JSON.stringify(
+      convertToRaw(editorState.getCurrentContent())
+    );
+    updateDoc({ id: docInfo.id, content });
+  };
 
   const handleKeyCommand = (
     command: DraftEditorCommand,
@@ -251,24 +373,35 @@ const DocContent = () => {
     return "not-handled";
   };
 
-  const handleEditorStateChange = useCallback((editorState: EditorState) => {
-    const changeTypes = [
-      "insert-characters",
-      "insert-fragment",
-      "backspace-character",
-      "remove-range",
-      "undo",
-      "redo",
-    ];
-    const lastChangeType = editorState.getLastChangeType();
-    const selection = editorState.getSelection();
-    const currentContent = editorState.getCurrentContent()
-    const anchorKey = selection.getAnchorKey();
-    const selectionBlock = currentContent.getBlockForKey(anchorKey)
-    const selectionBlockText = selectionBlock.getText()
-    console.log("lastChangeType: ", lastChangeType, 'selectionBlockText: ', selectionBlockText);
-    setEditorState(editorState);
-  }, []);
+  const broadcast = debounce(
+    (editorState: EditorState) => {
+      const ws = wsRef.current;
+      if (ws === null) {
+        return;
+      }
+      ws.send(
+        JSON.stringify({
+          event: "doc",
+          data: {
+            docId: docInfo.id,
+            raw: convertToRaw(editorState.getCurrentContent()),
+          },
+        })
+      );
+    },
+    300,
+    true
+  );
+
+  const handleEditorStateChange = useCallback(
+    (editorState: EditorState) => {
+      // 每次状态更新广播给其他编辑者
+      broadcast(editorState);
+      setEditorState(editorState);
+      updateLastTime();
+    },
+    [docInfo]
+  );
 
   return (
     <div>
@@ -289,7 +422,10 @@ const DocContent = () => {
                 alignItems: "center",
               }}
             >
-              <DocsName>{title ? title : "未命名文档"}</DocsName>
+              <DocsName
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+              ></DocsName>
               <HoverIcon>
                 <Tooltip placement="bottom" title="收藏该文章">
                   <StarOutlined onClick={handleCollect} />
@@ -302,6 +438,16 @@ const DocContent = () => {
           </div>
         </InnerLeft>
         <InnerLeft>
+          <Button
+            type="primary"
+            style={{
+              borderRadius: "5px",
+              marginRight: "20px",
+            }}
+            onClick={saveManually}
+          >
+            手动保存
+          </Button>
           <Popover
             placement="bottom"
             title="链接分享"

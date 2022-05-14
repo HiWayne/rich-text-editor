@@ -31,6 +31,10 @@ export default defineConfig({
       assets: resolve("src/assets"),
       store: resolve("src/store"),
       components: resolve("src/components"),
+      api: resolve("src/api"),
     },
+  },
+  define: {
+    process: {}, //fix chalk error which is used by jsondiffpatch
   },
 });

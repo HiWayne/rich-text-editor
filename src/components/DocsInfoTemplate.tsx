@@ -1,69 +1,105 @@
-import styled from '@emotion/styled'
-import { Table } from 'antd'
-import axios from 'axios'
-import { useEffect, useState } from 'react'
+import styled from "@emotion/styled";
+import { Table, Space, Button, Modal } from "antd";
+import { deleteDoc, getDocList } from "api/doc";
+import axios from "axios";
+import { useEffect, useRef, useState } from "react";
+import { DocInfo } from "store/doc";
+import useStore from "store/index";
 
-const { Column } = Table
+const { Column } = Table;
 
 const Wrapper = styled.div`
   padding: 0 24px;
-`
-
-const data = [
-  {
-    type: '普通文档',
-    name: '你不努力谁替你努力',
-    owner: '李易峰',
-    recentTime: '2022-2-13'
-  },
-  {
-    type: '普通文档',
-    name: '欲戴皇冠，必承其重',
-    owner: '鹿晗',
-    recentTime: '2022-2-13'
-  },
-  {
-    type: '普通文档',
-    name: '努力不一定成功，但不努力一定不成功',
-    owner: '张杰',
-    recentTime: '2022-2-13'
-  }
-]
+`;
 
 const DocsInfoTemplate = () => {
-  const [data, setData] = useState([])
+  const [data, setData] = useState<DocInfo[]>([]);
+  const [modalVisible, setModalVisible] = useState(false);
+  const userInfo = useStore((state) => state.userInfo);
+
+  const deleteDocIdRef = useRef<number>(null as any);
+
+  const showModal = (docId: number) => {
+    deleteDocIdRef.current = docId;
+    setModalVisible(true);
+  };
+
+  const hiddenModal = () => {
+    setModalVisible(false);
+  };
+
+  const handleDeleteDoc = () => {
+    // 删除文档
+    deleteDoc({ docId: deleteDocIdRef.current }).then((result: boolean) => {
+      if (result) {
+        hiddenModal()
+        if (userInfo.id) {
+          getDocList({ userId: userInfo.id }).then((list: DocInfo[]) => {
+            setData(list);
+          });
+        }
+      }
+    });
+  };
+
+  const handleCancel = () => {
+    setModalVisible(false);
+  };
+
+  const viewDoc = (doc: DocInfo) => {
+    window.open(`/doc/create?id=${doc.id}`);
+  };
 
   useEffect(() => {
-    axios.post('http://localhost:8080/docs/see').then(res => {
-      if (res.status === 200) {
-        setData(res.data.data.results)
-        // setIsLogin(true)
-        // window.location.href = '/index'
-      } else {
-        //提示注册失败原因
-      }
-    })
-  }, [])
+    if (userInfo.id) {
+      getDocList({ userId: userInfo.id }).then((list: DocInfo[]) => {
+        setData(list);
+      });
+    }
+  }, [userInfo]);
 
   return (
     <Wrapper>
-      <Table
-        dataSource={data}
-        onRow={record => {
-          return {
-            onClick: event => {
-              window.open(`/docs/create?id=${record.id}`)
-            } // 点击行
-          }
-        }}
-      >
-        <Column title='文档类型' dataIndex='type' key='type' />
-        <Column title='文档名称' dataIndex='title' key='title' />
-        <Column title='所属人' dataIndex='author' key='author' />
-        <Column title='最近打开时间' dataIndex='latestAt' key='latestAt' />
+      <Table dataSource={data}>
+        <Column title="文档名称" dataIndex="name" key="id" />
+        <Column title="原作者" dataIndex="creator_name" key="id" />
+        <Column
+          title="最近更新时间"
+          dataIndex="update_time"
+          key="update_time"
+        />
+        <Column title="创建时间" dataIndex="create_time" key="id" />
+        <Column
+          key="id"
+          title="操作"
+          render={(text, record: DocInfo) => (
+            <Space>
+              <Button type="primary" onClick={(text) => viewDoc(record)}>
+                查看
+              </Button>
+              <Button
+                type="primary"
+                danger
+                onClick={() => showModal(record.id)}
+              >
+                删除
+              </Button>
+            </Space>
+          )}
+        />
       </Table>
+      <Modal
+        title="提示"
+        visible={modalVisible}
+        onOk={handleDeleteDoc}
+        onCancel={handleCancel}
+        cancelText="取消"
+        okText="确认"
+      >
+        <div>确认删除该文档吗</div>
+      </Modal>
     </Wrapper>
-  )
-}
+  );
+};
 
-export default DocsInfoTemplate
+export default DocsInfoTemplate;

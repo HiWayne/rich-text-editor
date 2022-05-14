@@ -3,8 +3,11 @@ import { Global } from "@emotion/react";
 import Home from "./pages/Home";
 import Login from "./pages/Login";
 import DocContent from "./pages/DocContent";
+import useAuthority from "./shared/hooks/useAuthority";
+import { Dispatch, SetStateAction } from "react";
 
 function App() {
+  const [hasPermission, setPermission] = useAuthority();
   return (
     <div className="App">
       <Global
@@ -59,9 +62,33 @@ function App() {
         }}
       ></Global>
       <Routes>
-        <Route path="/" element={<Login />} />
-        <Route path="/index" element={<Home />} />
-        <Route path="/docs/create" element={<DocContent />} />
+        <Route
+          path="/"
+          element={
+            hasPermission ? (
+              <Home />
+            ) : (
+              <Login
+                setPermission={
+                  setPermission as Dispatch<SetStateAction<boolean>>
+                }
+              />
+            )
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            <Login
+              setPermission={setPermission as Dispatch<SetStateAction<boolean>>}
+            />
+          }
+        />
+        {hasPermission ? (
+          <>
+            <Route path="/doc/create" element={<DocContent />} />
+          </>
+        ) : null}
       </Routes>
     </div>
   );

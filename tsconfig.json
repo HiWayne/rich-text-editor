@@ -19,7 +19,8 @@
     "paths": {
       "assets/*": ["src/assets/*"],
       "store/*": ["src/store/*"],
-      "components/*": ["src/components/*"]
+      "components/*": ["src/components/*"],
+      "api/*": ["src/api/*"]
     },
     "types": ["vite/client"]
   },

@@ -1,7 +1,17 @@
-import { useEffect, useState, ChangeEventHandler } from "react";
+import { useLinkClickHandler } from "react-router-dom";
+import {
+  useEffect,
+  useState,
+  ChangeEventHandler,
+  ReactEventHandler,
+  MouseEventHandler,
+  FC,
+} from "react";
 import styled from "@emotion/styled";
 import axios from "axios";
 import qs from "qs";
+import { userLogin, userRegister } from "api/user";
+import useStore from "store/index";
 // import { RegisterUser } from '../../api/login'
 
 const Wrapper = styled.div`
@@ -55,7 +65,11 @@ const Button = styled.button`
   cursor: pointer;
 `;
 
-const Login = () => {
+const Login: FC<{
+  setPermission: React.Dispatch<React.SetStateAction<boolean>>;
+}> = ({ setPermission }) => {
+  const setUserInfo = useStore((state) => state.setUserInfo);
+  const navigateToHome = useLinkClickHandler("/");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLogin, setIsLogin] = useState(true);
@@ -67,45 +81,31 @@ const Login = () => {
   const getInputPasswordValue: ChangeEventHandler<HTMLInputElement> = (e) => {
     setPassword(e.target.value);
   };
-  let params = {
-    username,
+
+  const changeToLogin = () => {
+    setIsLogin(true);
+  };
+
+  const params = {
+    name: username,
     password,
   };
-  const handleLogin = () => {
-    setIsLogin(true);
-    axios
-      .post("http://localhost:8080/users/login", qs.stringify(params))
-      .then((res) => {
-        console.log(res);
-        if (res.status === 200) {
-          // setIsLogin(true)
-          window.location.href = "/index";
-        } else {
-          //提示注册失败原因
-        }
-      });
+  const handleLogin: MouseEventHandler<any> = async (e) => {
+    const data = await userLogin(params);
+    if (data) {
+      setPermission(true);
+      setUserInfo(data.user);
+      navigateToHome(e);
+    }
   };
-  const handleRegister = () => {
-    let params = {
-      username,
-      password,
-    };
-    setIsLogin(false);
-    // post 请求时 如果Content-Type的值不是浏览器所能识别的三种之外的 将会被认为是跨域
-    // 所以 当用post请求 并且参数类型是json时 就需要使用qs将其字符化 来解决跨域
-    axios
-      .post("http://localhost:8080/users/register", qs.stringify(params))
-      .then((res) => {
-        console.log(res);
-        if (res.status === 200) {
-          setIsLogin(true);
-        } else {
-          //提示注册失败原因
-        }
-      });
+  const handleRegister: MouseEventHandler<any> = async (e) => {
+    const user = await userRegister(params);
+    if (user) {
+      changeToLogin();
+    }
   };
-  const toBeLogin = () => {
-    setIsLogin(!isLogin);
+  const toggleSelection = () => {
+    setIsLogin((isLogin) => !isLogin);
   };
   useEffect(() => {});
   return (
@@ -137,14 +137,20 @@ const Login = () => {
       {isLogin ? (
         <div style={{ marginTop: "20px" }}>
           没有账号？
-          <span style={{ color: "red", cursor: "pointer" }} onClick={toBeLogin}>
+          <span
+            style={{ color: "red", cursor: "pointer" }}
+            onClick={toggleSelection}
+          >
             点击注册
           </span>
         </div>
       ) : (
         <div style={{ marginTop: "20px" }}>
           已有账号？
-          <span style={{ color: "red", cursor: "pointer" }} onClick={toBeLogin}>
+          <span
+            style={{ color: "red", cursor: "pointer" }}
+            onClick={toggleSelection}
+          >
             点击登录
           </span>
         </div>

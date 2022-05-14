@@ -6,6 +6,7 @@ import "assets/css/prism-okaidia.css";
 
 export interface EditorState {
   editorState: EditorStateInDraft;
+  initEditorState: () => void;
   setEditorState: (newEditorState: EditorStateInDraft) => void;
 }
 
@@ -58,19 +59,18 @@ const contentState = convertFromRaw({
       type: "unordered-list-item",
       text: "⚡ Fun fact: ...",
     },
-    {
-      type: "unstyled",
-      text: "You can type some JavaScript below:",
-    },
-    {
-      type: "code-block",
-      text: 'const message = "This is awesome!";',
-    },
   ],
 });
 
 const createEditorState: StateCreator<EditorState> = (set, get) => ({
-  editorState: EditorStateInDraft.createWithContent(contentState, decorator),
+  editorState: EditorStateInDraft.createEmpty(),
+  initEditorState: () =>
+    set({
+      editorState: EditorStateInDraft.createWithContent(
+        contentState,
+        decorator
+      ),
+    }),
   setEditorState: (newEditorState: EditorStateInDraft) =>
     set({
       editorState: newEditorState,
