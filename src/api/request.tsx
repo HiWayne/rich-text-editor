@@ -1,27 +1,27 @@
-import axios from "axios";
+import axios, { AxiosRequestConfig } from "axios";
 import { notification } from "antd";
 import { CloseOutlined } from "@ant-design/icons";
 
-export default async function request(options) {
-  let response;
-  try {
-    response = await axios(options);
-    return response;
-  } catch (err) {
-    return response;
-  }
-}
-
-const handleError = (message) => {
+const handleError = (message: string) => {
   notification.open({
     message,
     icon: <CloseOutlined style={{ color: "red" }} />,
   });
 };
 
+export const getDataFromStorage = (key: string) => {
+  const localStorageValue = window.localStorage.getItem(key);
+  if (localStorageValue !== undefined) {
+    return localStorageValue;
+  } else {
+    return window.sessionStorage.getItem(key);
+  }
+};
+
 axios.interceptors.request.use((request) => {
-  const access_token = window.localStorage.getItem("access_token");
+  const access_token = getDataFromStorage("access_token");
   if (access_token) {
+    // @ts-ignore
     request.headers["token"] = access_token;
   }
   return request;
@@ -36,11 +36,21 @@ axios.interceptors.response.use(
         const neededData = data.data;
         if (neededData) {
           const { access_token, refresh_token } = neededData;
-          if (access_token) {
-            window.localStorage.setItem("access_token", access_token);
-          }
-          if (refresh_token) {
-            window.localStorage.setItem("refresh_token", refresh_token);
+          // @ts-ignore
+          if (!axios.__customConfig || axios.__customConfig.rememberUser) {
+            if (access_token) {
+              window.localStorage.setItem("access_token", access_token);
+            }
+            if (refresh_token) {
+              window.localStorage.setItem("refresh_token", refresh_token);
+            }
+          } else {
+            if (access_token) {
+              window.sessionStorage.setItem("access_token", access_token);
+            }
+            if (refresh_token) {
+              window.sessionStorage.setItem("refresh_token", refresh_token);
+            }
           }
         }
         return Promise.resolve(data);
@@ -63,16 +73,23 @@ axios.interceptors.response.use(
   }
 );
 
-const _get = (url, params, config) => {
+type RequestFunc = (
+  url: string,
+  params: any,
+  config?: AxiosRequestConfig<any>
+) => Promise<any>;
+
+const _get: RequestFunc = (url, params, config) => {
   return new Promise((resolve, reject) => {
     axios
+      // @ts-ignore
       .get(url, { params, config })
       .then((response) => resolve(response.data))
       .catch((err) => reject(err));
   });
 };
 
-const _post = (url, data, config) => {
+const _post: RequestFunc = (url, data, config) => {
   const defaultConfig = {
     credentials: "include",
   };
@@ -83,6 +100,7 @@ const _post = (url, data, config) => {
     ...newConfig.headers,
   };
 
+  // @ts-ignore
   if (config && config.useJSON) {
     data = JSON.stringify(data);
   }
@@ -95,16 +113,18 @@ const _post = (url, data, config) => {
   });
 };
 
-const _delete = (url, params, config) => {
+const _delete: RequestFunc = (url, params, config) => {
   return new Promise((resolve, reject) => {
     axios
+      // @ts-ignore
       .delete(url, { params, config })
       .then((response) => resolve(response.data))
       .catch((err) => reject(err));
   });
 };
 
-const createFetch = (method) => (url) => (params) => method(url, params);
+const createFetch = (method: RequestFunc) => (url: string) => (params: any) =>
+  method(url, params);
 
 export const get = createFetch(_get);
 export const post = createFetch(_post);

@@ -87,6 +87,7 @@ function App() {
         {hasPermission ? (
           <>
             <Route path="/doc/create" element={<DocContent />} />
+            <Route path="/doc/edit" element={<DocContent />} />
           </>
         ) : null}
       </Routes>

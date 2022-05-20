@@ -5,6 +5,7 @@ import axios from "axios";
 import { useEffect, useRef, useState } from "react";
 import { DocInfo } from "store/doc";
 import useStore from "store/index";
+import dayjs from "dayjs";
 
 const { Column } = Table;
 
@@ -32,7 +33,7 @@ const DocsInfoTemplate = () => {
     // 删除文档
     deleteDoc({ docId: deleteDocIdRef.current }).then((result: boolean) => {
       if (result) {
-        hiddenModal()
+        hiddenModal();
         if (userInfo.id) {
           getDocList({ userId: userInfo.id }).then((list: DocInfo[]) => {
             setData(list);
@@ -47,13 +48,20 @@ const DocsInfoTemplate = () => {
   };
 
   const viewDoc = (doc: DocInfo) => {
-    window.open(`/doc/create?id=${doc.id}`);
+    window.open(`/doc/edit/?id=${doc.id}`);
   };
 
   useEffect(() => {
     if (userInfo.id) {
       getDocList({ userId: userInfo.id }).then((list: DocInfo[]) => {
-        setData(list);
+        const formatResponse = (response: DocInfo[]) =>
+          response.map((doc) => ({
+            ...doc,
+            create_time: dayjs(doc.create_time).format("YYYY-MM-DD HH:mm:ss"),
+            update_time: dayjs(doc.update_time).format("YYYY-MM-DD HH:mm:ss"),
+          }));
+        console.log(list)
+        setData(formatResponse(list));
       });
     }
   }, [userInfo]);
@@ -74,7 +82,7 @@ const DocsInfoTemplate = () => {
           title="操作"
           render={(text, record: DocInfo) => (
             <Space>
-              <Button type="primary" onClick={(text) => viewDoc(record)}>
+              <Button type="primary" onClick={() => viewDoc(record)}>
                 查看
               </Button>
               <Button

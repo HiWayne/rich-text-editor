@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ChangeEventHandler,
+  ReactEventHandler,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import styled from "@emotion/styled";
 import debounce from "debounce";
 import { Delta, patch } from "jsondiffpatch";
@@ -50,7 +58,7 @@ const InnerLeft = styled.div`
   align-items: center;
 `;
 
-const DocsName = styled.input`
+const DocsTitle = styled.input`
   outline: none;
   border: 1px solid rgba(0, 0, 0, 0);
   overflow: hidden;
@@ -142,14 +150,12 @@ const myBlockStyleFn = (contentBlock: ContentBlock) => {
  */
 
 const DocContent = () => {
-  console.log(1);
-
   const { id } = getParams("");
+
   const [editorState, setEditorState, initEditorState] = useStore(
     (state) => [state.editorState, state.setEditorState, state.initEditorState],
     shallow
   );
-
   const userInfo = useStore((state) => state.userInfo);
   const [docInfo, setDocInfo] = useStore(
     (state) => [state.docInfo, state.setDocInfo],
@@ -158,20 +164,30 @@ const DocContent = () => {
 
   const [title, setTitle] = useState("未命名文档");
   const [lastUpdateTimeText, setLastUpdateTimeText] = useState("");
-  const [renderContent, setRenderContent] = useState("");
 
+  // 更新逻辑定时器返回值引用
+  const updateTimerRef = useRef<number | null>(null);
+  // 最近更新时间引用
   const lastUpdateTimeRef = useRef(0);
-  const textAreaRef = useRef(null);
-  const linkRef = useRef(null);
   const wsRef = useRef<WebSocket>(null as any);
-  const updateTimerRef = useRef<number>(null as any);
 
   const handleChangePermission = () => {};
+
+  const handleCopied = useCallback(() => {}, []);
+
+  const shareUrl = useMemo(
+    () =>
+      window.location.protocol +
+      window.location.host +
+      window.location.pathname +
+      "?id=" +
+      docInfo.id,
+    [docInfo.id]
+  );
 
   const content = (
     <div>
       <Input
-        ref={linkRef}
         addonBefore={
           <Select
             defaultValue="获得链接的人可阅读"
@@ -183,25 +199,13 @@ const DocContent = () => {
           </Select>
         }
         suffix={
-          <CopyToClipboard
-            text={
-              window.location.protocol +
-              window.location.host +
-              window.location.pathname +
-              "?id=" +
-              docInfo.id
-            }
-          >
-            <span>双击复制链接</span>
-          </CopyToClipboard>
+          <Tooltip title="复制成功" trigger="click">
+            <CopyToClipboard text={shareUrl}>
+              <span style={{ cursor: "pointer" }}>点击复制链接</span>
+            </CopyToClipboard>
+          </Tooltip>
         }
-        value={
-          window.location.protocol +
-          window.location.host +
-          window.location.pathname +
-          "?id=" +
-          docInfo.id
-        }
+        value={shareUrl}
       ></Input>
     </div>
   );
@@ -210,12 +214,12 @@ const DocContent = () => {
     console.log("collect");
   };
 
-  // 不需要时刻更新时间，节流，0.2s触发一次时间更新
+  // 不需要时刻更新时间，节流，0.1s触发一次时间更新
   const updateLastTime = useMemo(
     () =>
       throttling(() => {
-        lastUpdateTimeRef.current = new Date().getTime();
-      }, 200),
+        updateTimeText();
+      }, 100),
     []
   );
 
@@ -237,6 +241,7 @@ const DocContent = () => {
         return;
       }
       lastUpdateTimeRef.current = update_time;
+      updateTimeText();
       const { editorState, setEditorState } = useStore.getState();
       const raw = convertToRaw(editorState.getCurrentContent());
       const nextContentState = convertFromRaw(patch(raw, delta));
@@ -247,8 +252,13 @@ const DocContent = () => {
     []
   );
 
+  // 更新时间受两个来源影响
+  // 1. 用户自己修改
+  // 2. 其他用户修改
   const updateTimeText = useCallback(() => {
-    const duration = new Date().getTime() - lastUpdateTimeRef.current;
+    const currentTime = new Date().getTime();
+    const duration = currentTime - lastUpdateTimeRef.current;
+    lastUpdateTimeRef.current = currentTime;
     let value = 1,
       suffix = "min前";
     if (duration < 60000 * 60) {
@@ -271,12 +281,10 @@ const DocContent = () => {
       value = Math.floor(duration / (60000 * 60 * 24 * 30 * 12));
     }
     const timeText = Math.max(value, 1) + suffix;
+    if (lastUpdateTimeText === timeText) {
+      return;
+    }
     setLastUpdateTimeText(timeText);
-    // 每分钟更新最近修改时间
-    updateTimerRef.current = setTimeout(updateTimeText, 60000);
-    return () => {
-      clearTimeout(updateTimerRef.current);
-    };
   }, []);
 
   const createInitialDoc = useCallback(async () => {
@@ -319,14 +327,11 @@ const DocContent = () => {
     if (id === undefined) {
       initEditorState();
     }
-    const clearUpdateTimer = updateTimeText();
-
     if (id === undefined) {
       createInitialDoc();
     } else {
       getDocById().then((doc) => {
         lastUpdateTimeRef.current = new Date(doc.update_time).getTime();
-        clearUpdateTimer();
         updateTimeText();
       });
     }
@@ -334,23 +339,12 @@ const DocContent = () => {
     // 建立websocket连接，订阅其他编辑者的更新
     const closeWebSocket = connectWebSocket();
 
-    // TODO: 后端返回的文档信息会有lastUpdateTime，这里临时用7天内的随机时间
-    const randomLastUpdateTime =
-      new Date().getTime() - Math.ceil(Math.random() * 60000 * 60 * 24 * 7);
-
     return () => {
       closeWebSocket();
-      clearUpdateTimer();
       setDocInfo(null as any);
       setEditorState(null as any);
     };
   }, []);
-
-  useEffect(() => {
-    if (Reflect.ownKeys(docInfo).length > 0 && title !== "未命名文档") {
-      updateDoc({ id: docInfo.id, name: title });
-    }
-  }, [docInfo, title]);
 
   const saveManually = () => {
     const content = JSON.stringify(
@@ -403,6 +397,12 @@ const DocContent = () => {
     [docInfo]
   );
 
+  const handleTitleChange: ChangeEventHandler<HTMLInputElement> = (e) => {
+    const title = e.target.value;
+    const params = { id: docInfo.id, name: title };
+    updateDoc(params);
+  };
+
   return (
     <div>
       <TopTool>
@@ -422,10 +422,10 @@ const DocContent = () => {
                 alignItems: "center",
               }}
             >
-              <DocsName
+              <DocsTitle
                 value={title}
-                onChange={(e) => setTitle(e.target.value)}
-              ></DocsName>
+                onChange={handleTitleChange}
+              ></DocsTitle>
               <HoverIcon>
                 <Tooltip placement="bottom" title="收藏该文章">
                   <StarOutlined onClick={handleCollect} />
@@ -481,7 +481,7 @@ const DocContent = () => {
       <Main>
         <NavBar></NavBar>
         <Divider type="vertical" style={{ height: "auto" }}></Divider>
-        <Content ref={textAreaRef}>
+        <Content>
           <ToolBar></ToolBar>
           <Editor
             blockStyleFn={myBlockStyleFn}

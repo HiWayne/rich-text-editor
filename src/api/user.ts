@@ -1,12 +1,24 @@
-import { get, post } from "./request";
+import axios from "axios";
+import { get, getDataFromStorage, post } from "./request";
 
 export const userRegister = post("http://localhost:3001/api/user/create");
 
-export const userLogin = post("http://localhost:3001/api/user/login");
+export const userLogin = (params: any, remember: boolean = true) => {
+  if (!remember) {
+    // @ts-ignore
+    if (!axios.__customConfig) {
+      // @ts-ignore
+      axios.__customConfig = {};
+    }
+    // @ts-ignore
+    axios.__customConfig.rememberUser = remember;
+  }
+  return post("http://localhost:3001/api/user/login")(params);
+};
 
 // body: { token: string }
 const refreshToken = () => {
-  const refresh_token = window.localStorage.getItem("refresh_token");
+  const refresh_token = getDataFromStorage("refresh_token");
   if (refresh_token) {
     return post("http://localhost:3001/api/user/refresh/token")({
       token: refresh_token,

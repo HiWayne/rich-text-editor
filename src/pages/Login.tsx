@@ -50,7 +50,6 @@ const Checkout = styled.input``;
 const InfoInput = styled.input`
   width: 500px;
   height: 40px;
-  // border: none;
   &:not(:first-of-type) {
     margin-top: 20px;
   }
@@ -73,6 +72,7 @@ const Login: FC<{
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [isLogin, setIsLogin] = useState(true);
+  const [remember, setRemember] = useState(true);
   //获取到 用户输入的 用户名
   const getInputValue: ChangeEventHandler<HTMLInputElement> = (e) => {
     setUsername(e.target.value);
@@ -91,7 +91,7 @@ const Login: FC<{
     password,
   };
   const handleLogin: MouseEventHandler<any> = async (e) => {
-    const data = await userLogin(params);
+    const data = await userLogin(params, remember);
     if (data) {
       setPermission(true);
       setUserInfo(data.user);
@@ -107,12 +107,19 @@ const Login: FC<{
   const toggleSelection = () => {
     setIsLogin((isLogin) => !isLogin);
   };
-  useEffect(() => {});
+
+  const toggledKey = isLogin ? "isLogin" : "isRegister";
+
   return (
     <Wrapper>
       <FormWrapper>
-        <InfoInput placeholder="Username" onChange={getInputValue}></InfoInput>
         <InfoInput
+          key={toggledKey + "Username"}
+          placeholder="Username"
+          onChange={getInputValue}
+        ></InfoInput>
+        <InfoInput
+          key={toggledKey + "Password"}
           placeholder="Password"
           type="password"
           onChange={getInputPasswordValue}
@@ -121,9 +128,16 @@ const Login: FC<{
       {isLogin ? (
         <ToolBar>
           <div>
-            <Checkout type="checkbox" /> Remember me
+            <Checkout
+              type="checkbox"
+              checked={remember}
+              onChange={(e) => {
+                setRemember(e.target.checked);
+              }}
+            />{" "}
+            Remember me
           </div>
-          <Forget>Forget password</Forget>
+          {/* <Forget>Forget password</Forget> */}
         </ToolBar>
       ) : null}
 
